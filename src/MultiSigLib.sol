@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+/**
+ * @title MultiSigLib
+ * @dev A library to manage a multisignature wallet with member addition and removal functionalities.
+ * The library allows members to vote on adding new members or removing existing ones, with a dynamic threshold based on the current number of members.
+ * The multisig version increments with each successful addition or removal of a member.
+ */
 library MultiSigLib {
 
     struct NewMemberVote {
@@ -31,6 +37,15 @@ library MultiSigLib {
     event MemberRemovalVoted(address indexed member, address indexed voter);
     event MemberRemoved(address indexed member);
 
+    /**
+     * @dev Initialize the multisig state with the initial members.
+     * Requirements:
+        * - The initial members list must contain at least 3 members.
+        * - No duplicate members are allowed.
+        * - No zero address is allowed as a member.
+    * Emits a {NewMemberAdded} event for each initial member added.
+    * Sets the initial threshold based on the number of members.
+     */
     function init(State storage state, address[] memory initialMembers) internal {
 
         require(initialMembers.length >= MINIMUM_MEMBERS_COUNT, "Initial multisig should have at least 3 members.");
@@ -50,6 +65,18 @@ library MultiSigLib {
 
     }
 
+    /**
+     * @dev Vote to add a new member to the multisig.
+     * Requirements:
+        * - The sender must be a member.
+        * - The candidate address must be valid (not zero).
+        * - The candidate must not be already a member.
+    * Emits a {NewMemberCandidateVoted} event when a vote is cast.
+    * Emits a {NewMemberAdded} event when the candidate is added as a member.
+    * If the candidate receives enough votes to meet the threshold, they are added as a member,
+        the multisig version is incremented, and the threshold is updated.
+    * Each member can vote only once per candidate per multisig version.
+     */
     function voteToAddNewMember(State storage state, address candidate) internal {
 
         require(state.isMember[msg.sender], "Sender is not a member.");
@@ -79,6 +106,19 @@ library MultiSigLib {
 
     }
 
+    /**
+     * @dev Vote to remove an existing member from the multisig.
+     * Requirements:
+        * - The sender must be a member.
+        * - The member address must be valid (not zero).
+        * - The member must be an existing member.
+        * - Removing the member must not drop the total members below the minimum required (3).
+    * Emits a {MemberRemovalVoted} event when a vote is cast.
+    * Emits a {MemberRemoved} event when the member is removed.
+    * If the member receives enough votes to meet the threshold, they are removed as a member,
+        the multisig version is incremented, and the threshold is updated.
+    * Each member can vote only once per member per multisig version.
+    */
     function voteToRemoveMember(State storage state, address member) internal {
 
         require(state.isMember[msg.sender], "Sender is not a member.");
@@ -114,6 +154,23 @@ library MultiSigLib {
         
     }
 
+    /**
+     * @dev Update the voting threshold based on the current number of members.
+     */
+    function _updateThreshold(State storage state) private {
+        state.threshold = state.membersCount / 2 + 1;
+    }
+
+    /**
+     * @dev Generate a unique voting key for a voter and subject (candidate/member) b`ased on the multisig version.
+     * This ensures that votes are unique per member per subject per multisig version.
+     * Ideal for members to vote again after a candidate/member has been added/removed and a new version is in place,
+        * useful to avoid a 'sender already voted' error when the same member wants to again for the same subject in a new version.
+     */
+    function _getVotingKey(address voter, address subject, uint256 proposedAtMultisigVersion) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(voter, subject, proposedAtMultisigVersion));
+    }
+
     function isMember(State storage state, address possibleMember) internal view returns (bool) {
         return state.isMember[possibleMember];
     }
@@ -146,11 +203,4 @@ library MultiSigLib {
         return state.removeMemberVotes[member].proposedAtMultisigVersion;
     }
 
-    function _updateThreshold(State storage state) private {
-        state.threshold = state.membersCount / 2 + 1;
-    }
-
-    function _getVotingKey(address voter, address subject, uint256 proposedAtMultisigVersion) private pure returns (bytes32) {
-        return keccak256(abi.encodePacked(voter, subject, proposedAtMultisigVersion));
-    }
 }
