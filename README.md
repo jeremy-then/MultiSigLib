@@ -18,6 +18,10 @@ Using **Foundry**:
 
 > `forge install jeremy-then/MultiSigLib@main`
 
+Or specifying a version:
+
+> `forge install jeremy-then/MultiSigLib@v1.0.0`
+
 ### Import paths
 
 - If your repo name is `multisig-lib`:
